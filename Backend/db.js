@@ -3,10 +3,10 @@
 
 const sql = require('mssql');
 const config = {
-    user: 'tu_usuario',
-    password: 'tu_contraseña',
-    server: 'tu_servidor',
-    database: 'tu_base_de_datos',
+    user: '',
+    password: '',
+    server: '',
+    database: 'MRO',
     options: {
         encrypt: true, // Usar cifrado si es necesario
         trustServerCertificate: true // Cambiar a true para desarrollo local
