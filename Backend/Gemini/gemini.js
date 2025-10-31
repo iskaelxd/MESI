@@ -1,61 +1,111 @@
-//Backend/Gemini/gemini.js
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
-
-import { GoogleGenAI } from "@google/genai";
-
-
-
-// Instancia del cliente leyendo la API key del entorno
+/**
+ * Obtiene una instancia del cliente de Gemini (SDK v1.x).
+ */
 export function getGeminiClient() {
-const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("Falta GEMINI_API_KEY en variables de entorno");
   }
-  return new GoogleGenAI({ apiKey });
+  // CORRECCIÓN: Usamos GoogleGenAI (singular) como en tu versión
+  return new GoogleGenAI(apiKey);
 }
 
-
+/**
+ * Genera texto usando el LLM con un prompt de sistema.
+ * @param {string} userPrompt El prompt del usuario.
+ */
 export async function generateText(userPrompt, options = {}) {
   const ai = getGeminiClient();
 
-  const systemPrompt =
-    options.systemPrompt ||
-    process.env.AGENT_SYSTEM_PROMPT ||
-    "Eres un asistente útil. Responde claro y con pasos.";
+  const modelName = options.model || "gemini-2.5-flash-preview-09-2025";
+  
+  // --- INICIO DE LA CORRECCIÓN N° 5 ---
+  // El log 'Respuesta inesperada' prueba que el 'systemInstruction' separado 
+  // está siendo ignorado por esta versión/método (ai.models.generateContent).
+  //
+  // SOLUCIÓN: Vamos a "hornear" las instrucciones del sistema DENTRO del
+  // prompt del usuario, en lugar de pasarlo como un campo separado.
 
-  const model = options.model || "gemini-2.5-flash";
+  // 1. Obtenemos las instrucciones del sistema (o un default)
+  const systemInstruction = options.systemPrompt || "Eres un asistente útil.";
 
-  // Para @google/genai, puedes inyectar el system prompt en contents
-  // al inicio y luego el del usuario. (Algunas versiones soportan systemInstruction,
-  // pero este método funciona de forma universal).
-  const contents = [
-    // prompt oculto (no lo envíes al cliente ni lo logs)
-    {
-      role: "user",
-      parts: [{ text: `### SYSTEM (oculto)\n${systemPrompt}` }],
+  // 2. Creamos un ÚNICO prompt que el modelo no pueda ignorar.
+  const combinedPrompt = `${systemInstruction}
+
+--- PREGUNTA DEL USUARIO ---
+${userPrompt}`;
+
+  const requestPayload = {
+    model: modelName,
+    
+    // 3. ELIMINAMOS 'systemInstruction' de aquí, ya no es necesario.
+    /*
+    systemInstruction: {
+      role: "system",
+      parts: [{ text: systemInstruction }],
     },
-    // prompt del usuario
-    {
-      role: "user",
-      parts: [{ text: userPrompt }],
-    },
-  ];
+    */
 
-  const response = await ai.models.generateContent({
-    model,
-    contents,
+    // 4. Pasamos el prompt combinado como el contenido principal del usuario
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: combinedPrompt }],
+      },
+    ],
+
+    // 5. 'generationConfig' va aquí
     generationConfig: {
       temperature: options.temperature ?? 0.7,
-      maxOutputTokens: options.maxOutputTokens ?? 512,
+      maxOutputTokens: options.maxOutputTokens ?? 1024,
     },
-    // safetySettings: [...], // si lo necesitas
-  });
 
-  const text =
-    response?.text ??
-    response?.output_text ??
-    response?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ??
-    "";
+    // 6. 'safetySettings' va aquí
+    safetySettings: [
+      {
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+    ],
+  };
+  // --- FIN DE LA CORRECCIÓN N° 5 ---
 
-  return text.trim();
+  try {
+    const result = await ai.models.generateContent(requestPayload);
+    
+    if (result && result.candidates && result.candidates[0] &&
+        result.candidates[0].content && 
+        result.candidates[0].content.parts &&
+        result.candidates[0].content.parts[0] &&
+        typeof result.candidates[0].content.parts[0].text === 'string'
+    ) {
+      const text = result.candidates[0].content.parts.map(p => p.text).join("");
+      return text.trim();
+    } else if (result && result.promptFeedback) { 
+       console.error("Feedback del Prompt:", result.promptFeedback);
+       throw new Error(`Generación bloqueada. Razón: ${result.promptFeedback.blockReason}`);
+    } else {
+      console.error("Respuesta inesperada de la API:", result);
+       if (result && result.candidates && result.candidates[0]) {
+        console.error("Contenido del candidato (para depurar):", result.candidates[0].content);
+      }
+      throw new Error("No se pudo extraer texto de la respuesta de la API.");
+    }
+
+  } catch (err) {
+    console.error("Error en la API de Gemini:", err.message);
+    
+    if (err.message.includes("Generación bloqueada")) {
+         throw err; // Re-lanzar el error que ya creamos
+    }
+    
+    throw new Error(`Error al generar contenido: ${err.message}`);
+  }
 }
+
