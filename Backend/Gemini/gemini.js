@@ -1,37 +1,25 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
-/**
- * Obtiene una instancia del cliente de Gemini (SDK v1.x).
- */
+
 export function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("Falta GEMINI_API_KEY en variables de entorno");
   }
-  // CORRECCIÓN: Usamos GoogleGenAI (singular) como en tu versión
+
   return new GoogleGenAI(apiKey);
 }
 
-/**
- * Genera texto usando el LLM con un prompt de sistema.
- * @param {string} userPrompt El prompt del usuario.
- */
+
 export async function generateText(userPrompt, options = {}) {
   const ai = getGeminiClient();
 
   const modelName = options.model || "gemini-2.5-flash-preview-09-2025";
   
-  // --- INICIO DE LA CORRECCIÓN N° 5 ---
-  // El log 'Respuesta inesperada' prueba que el 'systemInstruction' separado 
-  // está siendo ignorado por esta versión/método (ai.models.generateContent).
-  //
-  // SOLUCIÓN: Vamos a "hornear" las instrucciones del sistema DENTRO del
-  // prompt del usuario, en lugar de pasarlo como un campo separado.
 
-  // 1. Obtenemos las instrucciones del sistema (o un default)
   const systemInstruction = options.systemPrompt || "Eres un asistente útil.";
 
-  // 2. Creamos un ÚNICO prompt que el modelo no pueda ignorar.
+
   const combinedPrompt = `${systemInstruction}
 
 --- PREGUNTA DEL USUARIO ---
@@ -40,15 +28,7 @@ ${userPrompt}`;
   const requestPayload = {
     model: modelName,
     
-    // 3. ELIMINAMOS 'systemInstruction' de aquí, ya no es necesario.
-    /*
-    systemInstruction: {
-      role: "system",
-      parts: [{ text: systemInstruction }],
-    },
-    */
 
-    // 4. Pasamos el prompt combinado como el contenido principal del usuario
     contents: [
       {
         role: "user",
@@ -56,13 +36,13 @@ ${userPrompt}`;
       },
     ],
 
-    // 5. 'generationConfig' va aquí
+
     generationConfig: {
       temperature: options.temperature ?? 0.7,
       maxOutputTokens: options.maxOutputTokens ?? 1024,
     },
 
-    // 6. 'safetySettings' va aquí
+í
     safetySettings: [
       {
         category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -74,7 +54,7 @@ ${userPrompt}`;
       },
     ],
   };
-  // --- FIN DE LA CORRECCIÓN N° 5 ---
+
 
   try {
     const result = await ai.models.generateContent(requestPayload);
