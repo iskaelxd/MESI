@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Tus funciones de Gemini y BD
+
 import { generateText } from "./Gemini/gemini.js";
 import { executeQuery } from "./db.js";
 
@@ -15,7 +15,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuración para __dirname en ES Modules
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -33,19 +33,11 @@ console.log("Contexto 'contexto.txt' cargado exitosamente.");
  console.error("¡ERROR! No se pudo leer 'contexto.txt'. El bot no podrá consultar la BD.", err.message);
 }
 
-// --- Definición de Prompts del Sistema ---
 
-// --- INICIO DE LA CORRECCIÓN ---
-// Tu 'contexto.txt' (cargado en dbSchemaContext) YA CONTIENE
-// las instrucciones ("ERES UN AGENTE...", "DEBES PODER RESPONDER CON UNA CONSULTA SQL...").
-// No necesitamos envolverlo en MÁS instrucciones.
-// Simplemente usamos el contenido del archivo como el prompt.
 const SQL_GENERATOR_PROMPT = dbSchemaContext;
 // --- FIN DE LA CORRECCIÓN ---
 
 
-// 2. Prompt para el Paso 3: Sintetizar la respuesta final
-// (Este prompt SÍ lo definimos aquí, porque no está en tu contexto.txt)
 const ANSWER_SYNTHESIZER_PROMPT = `
 Eres un asistente de servicio al cliente amigable y servicial llamado MESI.
 Tu tarea es responder la pregunta original del usuario en lenguaje natural.
@@ -67,8 +59,7 @@ const { prompt: userPrompt, model, temperature, maxOutputTokens } = req.body || 
 if (!userPrompt || typeof userPrompt !== 'string') {return res.status(400).json({ error: "Falta 'prompt' (string) en el body" });
  }
 
- // --- PASO 1: Generar SQL o clasificar como "NO_SQL" ---
-       // Aquí le pasamos tu contexto.txt COMPLETO como systemPrompt.
+
  const firstPassResponse = await generateText(userPrompt, {
  systemPrompt: SQL_GENERATOR_PROMPT, // Ahora contiene tus 14,000 palabras
  model: model || "gemini-2.5-flash-preview-09-2025",
@@ -81,8 +72,7 @@ if (!userPrompt || typeof userPrompt !== 'string') {return res.status(400).json(
 // --- PASO 2: Ejecutar lógica basada en la respuesta del LLM ---
 
  if (trimmedResponse.toUpperCase() === 'NO_SQL') {
- // Es una pregunta general.
-            // Aquí SÍ usamos el AGENT_SYSTEM_PROMPT del .env, o el de síntesis.
+
  const generalSystemPrompt = process.env.AGENT_SYSTEM_PROMPT || ANSWER_SYNTHESIZER_PROMPT;
 
  const generalAnswer = await generateText(userPrompt, {
@@ -103,7 +93,7 @@ const sqlQuery = trimmedResponse;
 let dbData = null;
 let dbError = null;
 
-// --- PASO 2b: Ejecutar el query en la BD ---
+
  try {
  dbData = await executeQuery(sqlQuery);
 } catch (err) {
@@ -111,8 +101,7 @@ console.error("Error en executeQuery:", err);
  dbError = err.message;
  }
 
- // --- PASO 3: Sintetizar la respuesta final ---
- // Creamos un nuevo "user prompt" para el LLM de síntesis
+s
 const synthesisUserPrompt = `
  Pregunta Original del Usuario:
  "${userPrompt}"
@@ -137,10 +126,9 @@ generatedQuery: sqlQuery // Opcional: para debugging
 });
 
 } else {
-  // El LLM devolvió algo inesperado (ni SQL ni NO_SQL)
+
  console.warn("Respuesta inesperada del LLM (Paso 1):", trimmedResponse);
-// ... pero podría ser una respuesta general si el prompt falló.
-            // Devolvamos esto al usuario por ahora para ver qué es.
+
 return res.json({ 
                 text: trimmedResponse, 
                 source: "unexpected_passthrough" 
