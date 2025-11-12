@@ -82,7 +82,7 @@ ${userPrompt}`;
     console.error("Error en la API de Gemini:", err.message);
     
     if (err.message.includes("Generación bloqueada")) {
-         throw err; // Re-lanzar el error que ya creamos
+         throw err; 
     }
     
     throw new Error(`Error al generar contenido: ${err.message}`);
